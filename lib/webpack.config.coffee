@@ -21,13 +21,19 @@ sveltePreprocess =
       filename: input.filename
     code: code.replace /\$_/g, '$:'
 
-babel =
+makeBabel = (prjPath = '') ->
+  presets = [
+    require.resolve('@babel/preset-env')
+    require.resolve('@babel/preset-react')
+  ]
+  try
+    presets.push require.resolve('@babel/preset-typescript', { paths: [prjPath] })
+  catch
+    # @babel/preset-typescript is optional — .ts/.tsx files won't compile without it
+
   loader: 'babel-loader'
   options:
-    presets: [
-      require.resolve('@babel/preset-env')
-      require.resolve('@babel/preset-react')
-    ]
+    presets: presets
     plugins: [
       require.resolve('babel-plugin-add-module-exports')
       require.resolve('@babel/plugin-transform-modules-commonjs')
@@ -56,16 +62,20 @@ module.exports = (builderCmd, builderEnv, builderDir) ->
       implementation: builderConfig.sassImplementation || 'node-sass'
       sassOptions: builderConfig.sassOptions || {}
 
+  babel = makeBabel(prjPath)
+
+  tsRule = [{test: /\.tsx?$/, exclude: /node_modules/, use: [thread, babel]}]
+
   # Svelte support — enabled when builderConfig.svelte is set
   svelteRule = if builderConfig.svelte
     svelteOpts = Object.assign {dev: mode == 'development', preprocess: sveltePreprocess}, builderConfig.svelte
     [{test: /\.svelte$/, use: {loader: 'svelte-loader', options: svelteOpts}}]
   else []
 
-  # Extensions — auto-add svelte-related when svelte is enabled
-  defaultExtensions = ['.coffee', '.js', '.cjsx']
+  # Extensions — auto-add based on enabled features
+  defaultExtensions = ['.coffee', '.js', '.cjsx', '.ts', '.tsx']
   if builderConfig.svelte
-    defaultExtensions = ['.mjs', '.js', '.svelte', '.coffee']
+    defaultExtensions = ['.mjs', '.js', '.svelte', '.coffee', '.ts', '.tsx']
   extensions = builderConfig.extensions || defaultExtensions
 
   # Main fields — auto-add 'svelte' when svelte is enabled
@@ -97,6 +107,7 @@ module.exports = (builderCmd, builderEnv, builderDir) ->
   module:
     rules: [
       ...svelteRule
+      ...tsRule
       ...(builderConfig.extraRules || [])
       {
         test: /\.scss$/
